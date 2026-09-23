@@ -1,7 +1,9 @@
 import { HiveQueueServerError } from "./classes/HiveQueueServerError.js";
+import { HiveQueueServerResponse } from "./classes/HiveQueueServerResponse.js";
 
 export {
-    HiveQueueServerError
+    HiveQueueServerError,
+    HiveQueueServerResponse
 }
 
 export type {
@@ -9,3 +11,8 @@ export type {
     HiveQueueServerErrorCode,
     HiveQueueServerErrorLogFormatter
 } from "./classes/HiveQueueServerError.js";
+
+export type {
+    HiveQueueServerResponseBody,
+    HiveQueueServerResponseOnEnd
+} from "./classes/HiveQueueServerResponse.js";
