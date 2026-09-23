@@ -5,6 +5,7 @@ import CTGTestResult from "ctg-js-test/result";
 import errorClass from "./conformance/errorClass.ts";
 import responseClass from "./conformance/responseClass.ts";
 import requestClass from "./conformance/requestClass.ts";
+import configuration from "./conformance/configuration.ts";
 
 // Conformance categories are chained here in the order of the design doc's
 // conformance section as each is implemented.
@@ -12,6 +13,7 @@ const state = await CTGTest.init("hive-queue-server conformance")
     .chain("error class", errorClass)
     .chain("response class", responseClass)
     .chain("request class", requestClass)
+    .chain("configuration", configuration)
     .start(undefined, {
         haltOnFailure: false,
         timeout: 5000
