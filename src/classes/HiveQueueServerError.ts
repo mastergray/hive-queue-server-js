@@ -39,6 +39,7 @@ export class HiveQueueServerError extends Error {
         GATEWAY_TIMEOUT: 4004,
         INTERNAL: 4005,
         HTTP: 4006,
+        MALFORMED_PATH: 4007,
         STREAM_FAILED: 5000,
         TASK_NOT_COMPLETED: 5001
     } as const;
@@ -310,6 +311,15 @@ export class HiveQueueServerError extends Error {
             "Internal Server Error",
             500,
             { cause }
+        );
+    }
+
+    static MALFORMED_PATH(): HiveQueueServerError {
+        return new HiveQueueServerError(
+            HiveQueueServerError.Code.MALFORMED_PATH,
+            "http",
+            "Malformed Request Path",
+            400
         );
     }
 

@@ -31,6 +31,7 @@ const TABLE: [string, number, string, number | undefined][] = [
     ["SERVICE_UNAVAILABLE", 4003, "http", 503],
     ["GATEWAY_TIMEOUT", 4004, "http", 504],
     ["INTERNAL", 4005, "http", 500],
+    ["MALFORMED_PATH", 4007, "http", 400],
     ["STREAM_FAILED", 5000, "internal", undefined],
     ["TASK_NOT_COMPLETED", 5001, "internal", undefined]
 ];

@@ -420,16 +420,19 @@ Invoked by the host for every incoming request:
    `Connection: close`; return
 4. If `maxPending` is set and the admitted count equals it, respond
    503 with `Retry-After`; return
-5. Match the route (see Route Matching). No match responds 404 and
+5. Parse the URL into a decoded path and query. Invalid
+   percent-encoding responds 400 with `MALFORMED_PATH` and returns; no
+   admission.
+6. Match the route (see Route Matching). No match responds 404 and
    returns; no admission.
-6. Build the request object from the host request and the match (see
+7. Build the request object from the host request and the match (see
    Request Class). `body` is undefined.
-7. Build the response object around the host response, with an
+8. Build the response object around the host response, with an
    on-end callback that clears the deadline and decrements the
    admitted count (see Response Class)
-8. Apply CORS response headers if the origin matches (see CORS)
-9. Increment the admitted count; arm the deadline (see Deadline)
-10. Send the first task: `{ to: <first pipeline stage>, data: request }`
+9. Apply CORS response headers if the origin matches (see CORS)
+10. Increment the admitted count; arm the deadline (see Deadline)
+11. Send the first task: `{ to: <first pipeline stage>, data: request }`
     with the caller sentinel as `from`. The queue is active and
     concurrent, so this requests a pump.
 
@@ -529,10 +532,13 @@ sends the 504.
 
 ### Request Class
 
-**Static factory** `from(rawRequest, match) -> request`:
+**Static factory** `init(rawRequest, match) -> request`:
 
 1. `method`: upper-cased host method
-2. `path`: the URL path, percent-decoded, without the query string
+2. `path`: the URL path, percent-decoded, without the query string.
+   Invalid percent-encoding raises `MALFORMED_PATH`; the listener
+   parses the URL before building the request, so this surfaces there
+   as a 400
 3. `route`: the matched pattern; `params`: the match bindings, decoded
 4. `query`: parsed from the query string; repeated names become
    lists
@@ -749,7 +755,7 @@ When a handler wrapper responds with a thrown value:
   `{ "error": { "message": "Internal Server Error", "code": <INTERNAL> } }`;
   `onError` receives the original
 
-Built-in rejections (404, 413, 400, 503, 504) use the server error
+Built-in rejections (400, 404, 413, 503, 504) use the server error
 form with the corresponding condition's code.
 
 ### Error Class
@@ -777,7 +783,7 @@ UNKNOWN_DELEGATE(id)
 NOT_FOUND()                    PAYLOAD_TOO_LARGE()
 MALFORMED_BODY()               SERVICE_UNAVAILABLE()
 GATEWAY_TIMEOUT()              INTERNAL(cause?)
-HTTP(statusCode, message)
+HTTP(statusCode, message)      MALFORMED_PATH()
 
 STREAM_FAILED(cause?)          TASK_NOT_COMPLETED()
 ```
@@ -857,6 +863,7 @@ at launch (`UNKNOWN_*_WORKER`).
 | `GATEWAY_TIMEOUT` | 4004 | http | 504 |
 | `INTERNAL` | 4005 | http | 500 |
 | `HTTP` | 4006 | http | as given |
+| `MALFORMED_PATH` | 4007 | http | 400 |
 | `STREAM_FAILED` | 5000 | internal | — |
 | `TASK_NOT_COMPLETED` | 5001 | internal | — |
 
@@ -975,6 +982,9 @@ respond and then call `done()`.
   `GET`, empty body
 - Query `?a=1&a=2&b=3` — `query.a` is `["1","2"]`, `query.b` is `"3"`
 - Percent-encoded path — `path` and `params` are decoded
+- Path with invalid percent-encoding (e.g. `/a%zz`) — 400 with the
+  `MALFORMED_PATH` code; no route is matched; the admitted count is
+  unchanged
 - One worker ID bound to two routes — it runs for both and
   `request.route` distinguishes them
 
@@ -1090,7 +1100,7 @@ respond and then call `done()`.
 
 ### Request Class
 
-- `from(raw, match)` — fields populated as specified; `body`
+- `init(raw, match)` — fields populated as specified; `body`
   undefined; `locals` empty
 - `header("content-type")` and `header("Content-Type")` — same value
 - `is("application/json")` — true for `application/json;
