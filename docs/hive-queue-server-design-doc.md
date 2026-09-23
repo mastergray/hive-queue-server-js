@@ -786,9 +786,19 @@ STREAM_FAILED(cause?)          TASK_NOT_COMPLETED()
 deliberate HTTP error; its code is the single `HTTP` condition and
 its status is whatever was given.
 
-**`Code`**, **`is`**, and **`log`** as in Hive Queue's error class.
-`log` output is `[category:code:status] message`, with status omitted
-when the condition has none.
+**`Code`** and **`is`** as in Hive Queue's error class.
+
+**`log(formatter?) -> void`**: writes the error to standard error.
+Without a formatter, the output is `[category:code:status] message`,
+with status omitted when the condition has none. A formatter has the
+signature `formatter(message, code, category, statusCode) -> string`,
+where `statusCode` is undefined for conditions without one. This is
+the queue's formatter signature with the status appended, so a
+formatter written for queue errors is usable unchanged.
+
+The server error class does not extend the queue's. The two share a
+shape, not an ancestry: `HiveQueueError.is` is false for server
+errors, and the wrapper relies on that distinction.
 
 ---
 

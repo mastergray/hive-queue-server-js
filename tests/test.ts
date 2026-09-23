@@ -2,9 +2,12 @@ import CTGTest from "ctg-js-test";
 import CTGTestConsoleFormatter from "ctg-js-test/formatter/console";
 import CTGTestResult from "ctg-js-test/result";
 
+import errorClass from "./conformance/errorClass.ts";
+
 // Conformance categories are chained here in the order of the design doc's
 // conformance section as each is implemented.
 const state = await CTGTest.init("hive-queue-server conformance")
+    .chain("error class", errorClass)
     .start(undefined, {
         haltOnFailure: false,
         timeout: 5000

@@ -1,4 +1,11 @@
-// Public surface of hive-queue-server.
-// Populated as the implementation checklist in docs/hive-queue-server-design-doc.md is completed.
+import { HiveQueueServerError } from "./classes/HiveQueueServerError.js";
 
-export {};
+export {
+    HiveQueueServerError
+}
+
+export type {
+    HiveQueueServerErrorCategory,
+    HiveQueueServerErrorCode,
+    HiveQueueServerErrorLogFormatter
+} from "./classes/HiveQueueServerError.js";
