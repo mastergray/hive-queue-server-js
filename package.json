@@ -1,0 +1,51 @@
+{
+  "name": "hive-queue-server",
+  "version": "0.1.0",
+  "description": "A minimalist HTTP server built on hive-queue: every request is a task, every stage is a worker",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "check": "tsc --noEmit",
+    "clean": "node scripts/clean-dist.mjs",
+    "compile": "tsc",
+    "compile:package": "tsc -p tsconfig.package.json",
+    "minify": "node scripts/minify-dist.mjs",
+    "build": "run-s clean compile",
+    "build:package": "run-s clean compile:package minify",
+    "prepare": "npm run build:package",
+    "test": "tsx tests/test.ts",
+    "recompile": "tsc --watch",
+    "watch": "tsx watch tests/test.ts",
+    "dev": "run-p recompile watch"
+  },
+  "keywords": [
+    "server",
+    "http",
+    "queue",
+    "worker",
+    "chainable"
+  ],
+  "author": "mastergray",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastergray/hive-queue-server-js.git"
+  },
+  "homepage": "https://github.com/mastergray/hive-queue-server-js#readme",
+  "bugs": "https://github.com/mastergray/hive-queue-server-js/issues",
+  "dependencies": {
+    "hive-queue": "github:mastergray/hive-queue-js#v0.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "ctg-js-test": "github:claymoretechgroup/ctg-js-test#v3.0.0",
+    "esbuild": "^0.28.2",
+    "npm-run-all": "^4.1.5",
+    "tsx": "^4.23.11",
+    "typescript": "^7.0.2"
+  }
+}
