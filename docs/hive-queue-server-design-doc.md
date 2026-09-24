@@ -19,6 +19,14 @@ This design depends on Hive Queue design v2 (concurrent processing,
 `protected pump`). Where this document says "the queue", it means an
 instance conforming to that design.
 
+The reference implementation follows the CTG TypeScript style guides
+(`code-style.md`, `scaffolding.md`, `errors.md`, `testing.md`): one
+folder per class with its types and predicates beside it, validation
+by type predicate in constructors, the error-class shape described
+under Error Classes, and a manifest-based conformance suite in
+`tests/spec/`. Where those guides and this document differ, this
+document wins and the departure is noted here.
+
 ---
 
 ## API Contract Table
@@ -77,7 +85,7 @@ plus two fields:
 | Member | Description |
 |--------|-------------|
 | Static factory | Build a request from a host request and a route match |
-| `method`, `path`, `route`, `params`, `query`, `headers`, `body`, `locals`, `raw` | Parsed request fields |
+| `method`, `path`, `route`, `params`, `query`, `headers`, `body`, `raw` | Parsed request fields |
 | `header` | Case-insensitive header lookup |
 | `is` | Content-type check |
 | `readBody` | Read and parse the body with a size cap |
@@ -92,16 +100,26 @@ plus two fields:
 | `responded` | Whether the response has ended |
 | `raw` | The host response object |
 
-### Required — Error Class
+### Required — Error Classes
 
-| Member | Description |
-|--------|-------------|
-| Constructor | Create an error from a code, category, message, and HTTP status |
-| Per-condition factories (static) | One named constructor per canonical condition |
-| `Code` (static) | Constant map from condition name to numeric code |
-| `is` (static) | Type guard for instances of the class |
-| `log` | Write the error to standard error, optionally through a formatter |
-| `statusCode` | HTTP status the error maps to when sent as a response |
+Two classes: a base error, and an HTTP subclass that adds the status a
+response is sent with. The subclass adds fields, not codes; every code
+lives in the base registry.
+
+| Member | Class | Description |
+|--------|-------|-------------|
+| Constructor | both | Create an error from a config `{ code, message, data? }` (the subclass also takes `statusCode?`) |
+| `init` (static factory) | both | Mirrors the constructor |
+| `CODE` (static) | base | Constant registry from condition name to numeric code, including the `INVALID_CODE` sentinel |
+| `STATUS` (static) | subclass | Registry from label to the fixed HTTP status of every condition that has one |
+| Per-condition factories (static) | both | One named constructor per canonical condition, on the class whose instances it returns |
+| `is` (static) | both | Type guard for instances of that class |
+| `labelOf` (static) | base | Label for a code |
+| `code`, `message`, `data` | base | Registry code, non-empty message, payload of any kind (null when omitted) |
+| `label` | base | Getter derived from `code` |
+| `statusCode` | subclass | The HTTP status the response is sent with |
+| `log` | both | Write the error to standard error, optionally through a formatter; the subclass's line and entry include the status |
+| `toResponse` | subclass | Render the JSON body sent to the client |
 
 ### Compatibility Policy
 
@@ -278,8 +296,9 @@ the Worker Context table.
 **Static mount**: `{ prefix: string, dir: string }`
 
 **Server error**:
-`{ name, code: int, category: string, message: string, statusCode: int }`
-— extends the host's native error type.
+`{ name, code: int, label: string, message: string, data: any, statusCode?: int }`
+— extends the host's native error type. `statusCode` is present only
+on the HTTP subclass.
 
 ---
 
@@ -457,6 +476,15 @@ segment only). Matching:
 Path-scoped middleware uses the same matcher against its pattern with
 a trailing wildcard implied (prefix match).
 
+A single trailing slash on the request path is ignored for matching,
+so `/a` and `/a/` match the same routes. Patterns themselves may not
+have a trailing slash, since that would be an empty segment.
+
+The reference implementation exposes parsing and matching as a
+`HiveQueueServerRoute` class so it can be conformance-tested apart
+from the listener. It is an implementation detail, not part of the
+required API.
+
 ### Handler Wrapper (internal)
 
 Every handler — inline, ID-bound, or built-in — is registered on the
@@ -543,9 +571,8 @@ sends the 504.
 4. `query`: parsed from the query string; repeated names become
    lists
 5. `headers`: host headers with lower-case names
-6. `locals`: an empty structure
-7. `body`: undefined
-8. `raw`: the host request
+6. `body`: undefined
+7. `raw`: the host request
 
 **`header(name) -> string | undefined`**: case-insensitive lookup.
 
@@ -575,6 +602,7 @@ another content type may read `raw` directly.
 
 - `responded` false; pending status 200; pending headers empty;
   `raw` the host response
+- `onEnd` that is not a function raises `INVALID_CALLBACK`
 
 **`status(code) -> self`**: set the pending status. After `responded`,
 raise `ALREADY_RESPONDED`.
@@ -758,18 +786,45 @@ When a handler wrapper responds with a thrown value:
 Built-in rejections (400, 404, 413, 503, 504) use the server error
 form with the corresponding condition's code.
 
-### Error Class
+### Error Classes
 
-**Constructor**: `new(code, category, message, statusCode?, options?)`
+Both classes follow the CTG TypeScript error-class conventions: a
+static code registry declared as a constant, a config-object
+constructor, a message that must say something, and a payload of any
+kind.
 
-**Per-condition factories (static)**:
+**Base constructor**: `new({ code, message, data? }) -> error`
+
+1. If `code` is not a number, or is the `INVALID_CODE` sentinel, or is
+   not in the registry, raise a plain base error with code `-1`
+2. If `message` is not a string with at least one non-whitespace
+   character, raise `INVALID_MESSAGE`
+3. Store `code`, `message`, and `data` (null when omitted or undefined)
+
+An error the constructor raises is always a plain base-class instance
+with a non-empty message, whatever class was being constructed.
+
+**HTTP constructor**: `new({ code, message, statusCode?, data? }) -> error`
+
+1. Apply the base constructor rules
+2. Resolve the status: `statusCode` when given, else the `STATUS`
+   entry for the code's label. No status resolves, or a given status
+   outside 100–599, raises a plain base error with code `-1`.
+
+**`label`** is a getter derived from `code`: the registry name, or
+`INVALID_CODE` for -1 and any unregistered number.
+
+**`data`** is stored as given and is never part of a rendered response.
+
+**Per-condition factories (static)** — one named constructor per
+canonical condition, on the class whose instances it returns. Base:
 
 ```
 INVALID_PORT()                 INVALID_TIMEOUT()
 INVALID_CONCURRENCY()          INVALID_MAX_PENDING()
 INVALID_MAX_BODY_SIZE()        INVALID_DRAIN_TIMEOUT()
 INVALID_RETRY_AFTER()          INVALID_CORS(reason)
-INVALID_HEADERS(name)
+INVALID_HEADERS(name)          INVALID_CALLBACK(name)
 
 UNKNOWN_ROUTE_WORKER(id)       UNKNOWN_MIDDLEWARE_WORKER(id)
 INVALID_ROUTE(pattern)         INVALID_HANDLER()
@@ -778,29 +833,63 @@ LAUNCHED()
 
 SEND_AFTER_DONE()              DONE_AFTER_DONE()
 ENV_AFTER_DONE()               ALREADY_RESPONDED()
+
+STREAM_FAILED(cause?)          TASK_NOT_COMPLETED()
+
+INVALID_CODE(data?)            INVALID_MESSAGE(data?)
+```
+
+`INVALID_CODE` and `INVALID_MESSAGE` are the two conditions the
+constructor itself raises. `INVALID_CODE` is assembled directly on the
+base prototype rather than through the constructor, which would reject
+it again; both classes raise it through this one factory.
+
+HTTP subclass:
+
+```
 UNKNOWN_DELEGATE(id)
 
 NOT_FOUND()                    PAYLOAD_TOO_LARGE()
 MALFORMED_BODY()               SERVICE_UNAVAILABLE()
 GATEWAY_TIMEOUT()              INTERNAL(cause?)
 HTTP(statusCode, message)      MALFORMED_PATH()
-
-STREAM_FAILED(cause?)          TASK_NOT_COMPLETED()
 ```
 
 `HTTP(statusCode, message)` is the factory a handler uses to throw a
-deliberate HTTP error; its code is the single `HTTP` condition and
-its status is whatever was given.
+deliberate HTTP error; its code is the single `HTTP` condition and its
+status is whatever was given. `INTERNAL` and `STREAM_FAILED` carry the
+cause as `data`.
 
-**`Code`** and **`is`** as in Hive Queue's error class.
+**`CODE` (static)**: the registry, usable for lookups without
+constructing an error. **`STATUS` (static, subclass)**: label to fixed
+status for every condition that has one, in the same shape as `CODE`.
+
+**`is(value) -> bool` (static)**: on the base, true for any server
+error including subclass instances; on the subclass, true only for
+subclass instances. False for queue errors and native errors.
 
 **`log(formatter?) -> void`**: writes the error to standard error.
-Without a formatter, the output is `[category:code:status] message`,
-with status omitted when the condition has none. A formatter has the
-signature `formatter(message, code, category, statusCode) -> string`,
-where `statusCode` is undefined for conditions without one. This is
-the queue's formatter signature with the status appended, so a
-formatter written for queue errors is usable unchanged.
+Without a formatter, the base output is
+
+```
+{timestamp} Code: {label} ({code}), message: {message}
+```
+
+and the HTTP subclass's output is
+
+```
+{timestamp} Code: {label} ({code}), status: {status}, message: {message}
+```
+
+where the timestamp is ISO 8601. A formatter has the signature
+`formatter(entry) -> string` and its return value is written instead.
+The base entry is `{ timestamp, code, label, message }`; the HTTP
+subclass's entry adds `statusCode`. The base class knows nothing about
+a status; the subclass overrides `log` to include it.
+
+
+**`toResponse() -> body`** (subclass): renders
+`{ "error": { "message": <message>, "code": <code> } }`.
 
 The server error class does not extend the queue's. The two share a
 shape, not an ancestry: `HiveQueueError.is` is false for server
@@ -824,6 +913,7 @@ errors, and the wrapper relies on that distinction.
 | A pattern is `/`-rooted, has no empty segments, has `*` only as the last segment | `INVALID_ROUTE` |
 | A static prefix has no parameters or wildcard | `INVALID_ROUTE` |
 | A route or middleware handler is a string or a function | `INVALID_HANDLER` |
+| `onHalt`, `onError`, and a response's on-end callback are functions | `INVALID_CALLBACK` |
 
 Configuration rules are checked in the constructor and raised to the
 caller. Wiring rules are checked at the call that adds the entry
@@ -834,38 +924,46 @@ at launch (`UNKNOWN_*_WORKER`).
 
 ## Error System
 
-| Type | Code | Category | Status |
-|------|------|----------|--------|
-| `INVALID_PORT` | 1000 | configuration | — |
-| `INVALID_TIMEOUT` | 1001 | configuration | — |
-| `INVALID_CONCURRENCY` | 1002 | configuration | — |
-| `INVALID_MAX_PENDING` | 1003 | configuration | — |
-| `INVALID_MAX_BODY_SIZE` | 1004 | configuration | — |
-| `INVALID_DRAIN_TIMEOUT` | 1005 | configuration | — |
-| `INVALID_RETRY_AFTER` | 1006 | configuration | — |
-| `INVALID_CORS` | 1007 | configuration | — |
-| `INVALID_HEADERS` | 1008 | configuration | — |
-| `UNKNOWN_ROUTE_WORKER` | 2000 | wiring | — |
-| `UNKNOWN_MIDDLEWARE_WORKER` | 2001 | wiring | — |
-| `INVALID_ROUTE` | 2002 | wiring | — |
-| `INVALID_HANDLER` | 2003 | wiring | — |
-| `DUPLICATE_ROUTE` | 2004 | wiring | — |
-| `LAUNCHED` | 2005 | wiring | — |
-| `SEND_AFTER_DONE` | 3000 | lifecycle | — |
-| `DONE_AFTER_DONE` | 3001 | lifecycle | — |
-| `ENV_AFTER_DONE` | 3002 | lifecycle | — |
-| `ALREADY_RESPONDED` | 3003 | lifecycle | — |
-| `UNKNOWN_DELEGATE` | 3004 | lifecycle | 500 |
-| `NOT_FOUND` | 4000 | http | 404 |
-| `PAYLOAD_TOO_LARGE` | 4001 | http | 413 |
-| `MALFORMED_BODY` | 4002 | http | 400 |
-| `SERVICE_UNAVAILABLE` | 4003 | http | 503 |
-| `GATEWAY_TIMEOUT` | 4004 | http | 504 |
-| `INTERNAL` | 4005 | http | 500 |
-| `HTTP` | 4006 | http | as given |
-| `MALFORMED_PATH` | 4007 | http | 400 |
-| `STREAM_FAILED` | 5000 | internal | — |
-| `TASK_NOT_COMPLETED` | 5001 | internal | — |
+| Type | Code | Status |
+|------|------|--------|
+| `INVALID_PORT` | 1 | — |
+| `INVALID_TIMEOUT` | 2 | — |
+| `INVALID_CONCURRENCY` | 3 | — |
+| `INVALID_MAX_PENDING` | 4 | — |
+| `INVALID_MAX_BODY_SIZE` | 5 | — |
+| `INVALID_DRAIN_TIMEOUT` | 6 | — |
+| `INVALID_RETRY_AFTER` | 7 | — |
+| `INVALID_CORS` | 8 | — |
+| `INVALID_HEADERS` | 9 | — |
+| `INVALID_CALLBACK` | 10 | — |
+| `UNKNOWN_ROUTE_WORKER` | 11 | — |
+| `UNKNOWN_MIDDLEWARE_WORKER` | 12 | — |
+| `INVALID_ROUTE` | 13 | — |
+| `INVALID_HANDLER` | 14 | — |
+| `DUPLICATE_ROUTE` | 15 | — |
+| `LAUNCHED` | 16 | — |
+| `SEND_AFTER_DONE` | 17 | — |
+| `DONE_AFTER_DONE` | 18 | — |
+| `ENV_AFTER_DONE` | 19 | — |
+| `ALREADY_RESPONDED` | 20 | — |
+| `UNKNOWN_DELEGATE` | 21 | 500 |
+| `NOT_FOUND` | 22 | 404 |
+| `PAYLOAD_TOO_LARGE` | 23 | 413 |
+| `MALFORMED_BODY` | 24 | 400 |
+| `SERVICE_UNAVAILABLE` | 25 | 503 |
+| `GATEWAY_TIMEOUT` | 26 | 504 |
+| `INTERNAL` | 27 | 500 |
+| `HTTP` | 28 | as given |
+| `MALFORMED_PATH` | 29 | 400 |
+| `STREAM_FAILED` | 30 | — |
+| `TASK_NOT_COMPLETED` | 31 | — |
+| `INVALID_MESSAGE` | 32 | — |
+| `INVALID_CODE` | -1 | — |
+
+`INVALID_CODE` and `INVALID_MESSAGE` are raised only by the error
+constructor itself, for a code outside the registry or an empty
+message. `INVALID_CALLBACK` is raised when `onHalt`, `onError`, or a
+response's on-end callback is not a function.
 
 The lifecycle conditions mirror the queue's by name on purpose: they
 are the same misuse, raised by the server's wrapper instead of the
@@ -898,7 +996,8 @@ queue's guard so that they never halt the queue.
 - Routes and middleware bound to inline handlers or worker IDs,
   registered at launch
 - Pipeline of stages with a built-in body parser first; `done()`
-  forwards
+  forwards the request unchanged; data for other workers travels by
+  `send`
 - Per-request failure isolation, deadline with slot-leak duty, and
   admission
 - Request and response classes
@@ -999,7 +1098,6 @@ respond and then call `done()`.
 - Middleware responds and never calls `done()` — the route handler
   never runs; the slot is freed by the deadline's second duty and
   `onError` receives `TASK_NOT_COMPLETED`
-- Middleware sets `request.locals.user` — the route handler reads it
 - `use("/api", m)`, request `/other` — `m` does not run (wrapper
   forwards); request `/api/thing` — `m` runs
 - Two requests in flight, concurrency 1 — the second request's first
@@ -1101,7 +1199,7 @@ respond and then call `done()`.
 ### Request Class
 
 - `init(raw, match)` — fields populated as specified; `body`
-  undefined; `locals` empty
+  undefined
 - `header("content-type")` and `header("Content-Type")` — same value
 - `is("application/json")` — true for `application/json;
   charset=utf-8`, false otherwise
@@ -1237,18 +1335,38 @@ respond and then call `done()`.
 
 ### Error Class
 
-- Each factory produces its table code, category, and status
+- Each factory produces its table code, status, and label, and
+  returns an instance of the class that owns it
+- `CODE` holds exactly the table conditions plus `HTTP`,
+  `INVALID_CODE` (-1), and `INVALID_MESSAGE`
 - `HTTP(418, "m")` — code `HTTP`, status 418, message `"m"`
-- `INTERNAL(cause)` — cause chained
-- `is` — true for server errors, false for queue errors and natives
-- `log()` — `[http:4000:404] ...`; `[wiring:2005] ...` for a
-  condition without a status
+- `INTERNAL(cause)` and `STREAM_FAILED(cause)` — cause stored as
+  `data`; `data` is null when omitted
+- Wiring, delegate, header, and callback messages include the
+  offending identifier
+- Constructing with a code outside the registry, or with `-1` — a
+  plain base error with code `-1` and a non-empty message, even when
+  constructed through the subclass
+- Constructing with an empty or whitespace message —
+  `INVALID_MESSAGE`
+- HTTP subclass with a code that has no registered status and no
+  given status, or with a status outside 100–599 — code `-1`
+- `is` — base `is` true for base and subclass instances; subclass
+  `is` false for base instances; both false for queue errors, native
+  errors, strings, and null
+- Errors are native errors named `HiveQueueServerError`
+- `toResponse()` — `{ error: { message, code } }`
+- `log()` — `{timestamp} Code: NOT_FOUND (22), status: 404, message:
+  Not Found`; `{timestamp} Code: LAUNCHED (16), message: ...` for a
+  condition without a status; a formatter receives an entry with
+  timestamp, code, label, message, and status
+- `labelOf` — `"INVALID_CODE"` for -1 and any unregistered number
 
 ---
 
 ## Implementation Checklist
 
-1. Error class — codes, categories, statuses, factories, `is`, `log`
+1. Error classes — code registry, statuses, factories, `is`, `log`
 2. Response class — pending state, ending helpers, `onEnd`,
    `ALREADY_RESPONDED`
 3. Request class — factory, accessors, `readBody`

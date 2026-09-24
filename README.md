@@ -20,7 +20,12 @@ section.
 
 ```sh
 npm install
-npm run check
+npm run check      # type-checks src/ and tests/
 npm run build
-npm test
+npm test           # runs the spec suite through tests/run.ts
 ```
+
+Source follows the CTG TypeScript style guides: one folder per class
+under `src/` with its `types.ts` beside it, and a manifest-based
+conformance suite under `tests/spec/` with fixtures and host doubles
+under `tests/support/`.
