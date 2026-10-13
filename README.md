@@ -25,7 +25,6 @@ npm run build
 npm test           # runs the spec suite through tests/run.ts
 ```
 
-Source follows the CTG TypeScript style guides: one folder per class
-under `src/` with its `types.ts` beside it, and a manifest-based
-conformance suite under `tests/spec/` with fixtures and host doubles
-under `tests/support/`.
+Source is laid out one folder per class under `src/`, each with its
+`types.ts` beside it, with a manifest-based conformance suite under
+`tests/spec/` and fixtures and host doubles under `tests/support/`.

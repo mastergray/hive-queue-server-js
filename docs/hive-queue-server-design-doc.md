@@ -19,12 +19,11 @@ This design depends on Hive Queue design v2 (concurrent processing,
 `protected pump`). Where this document says "the queue", it means an
 instance conforming to that design.
 
-The reference implementation follows the CTG TypeScript style guides
-(`code-style.md`, `scaffolding.md`, `errors.md`, `testing.md`): one
+The reference implementation follows a fixed TypeScript style: one
 folder per class with its types and predicates beside it, validation
 by type predicate in constructors, the error-class shape described
 under Error Classes, and a manifest-based conformance suite in
-`tests/spec/`. Where those guides and this document differ, this
+`tests/spec/`. Where that style and this document differ, this
 document wins and the departure is noted here.
 
 ---
@@ -788,10 +787,10 @@ form with the corresponding condition's code.
 
 ### Error Classes
 
-Both classes follow the CTG TypeScript error-class conventions: a
-static code registry declared as a constant, a config-object
-constructor, a message that must say something, and a payload of any
-kind.
+Both classes follow the same error-class conventions as hive-queue's
+successors: a static code registry declared as a constant, a
+config-object constructor, a message that must say something, and a
+payload of any kind.
 
 **Base constructor**: `new({ code, message, data? }) -> error`
 
