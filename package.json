@@ -1,7 +1,7 @@
 {
   "name": "hive-queue-server",
   "version": "0.1.0",
-  "description": "A minimalist HTTP server built on hive-queue: every request is a task, every stage is a worker",
+  "description": "A minimalist HTTP server built on hive-queue where every request is a task and every stage is a worker",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

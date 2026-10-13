@@ -1,9 +1,9 @@
 # hive-queue-server
 
 `hive-queue-server` is a minimalist HTTP server built on
-[hive-queue](https://github.com/mastergray/hive-queue-js). Every request is a
-task, every stage of handling it is a worker, and routes and middleware are
-wiring that binds HTTP entry points to workers by ID.
+[hive-queue](https://github.com/mastergray/hive-queue-js) where every request
+is a task and every stage is a worker. Routes and middleware bind HTTP entry
+points to handlers, given inline or as registered worker IDs.
 
 The server owns the concerns the queue deliberately leaves out: per-request
 failure isolation, per-request deadlines, admission by depth, and lifecycle.
